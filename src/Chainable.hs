@@ -8,7 +8,7 @@
 -- Portability : portable
 --
 
--- TODO | - Shadow Prelude's (>) and (<) (?)
+-- TODO | - Shadow Prelude's, (==), (>) and (<) (?)
 --        -
 
 -- SPEC | -
@@ -16,9 +16,12 @@
 
 -- GHC Pragmas -----------------------------------------------------------------------------------------------------------------------------
 
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE EmptyDataDecls         #-}
+-- {-# LANGUAGE OverlappingInstances #-}
 
 -- API -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -26,68 +29,119 @@ module Chainable where
 
 -- Definitions -------------------------------------------------------------------------------------------------------------------------------------
 
+-- TODO | - Short-circuiting
+--        - Extensible (ie. allow different types of chaining)
+--        - Type-inferrable (no intermediary annotations)
+
+-- |
+data Lock
+data Ok
+
+-- |
+-- type family Chainable where
+--   chainable f (carried, previous) a = _
+--   chainable f a                   b = -- (a, f a b)
+class ChainableFamily a where
+  type Link a p r
+
+
+instance ChainableFamily Lock where
+  type Link Lock Double         Bool           = Ok
+  type Link Lock Double         (Double, Bool) = Ok
+  type Link Lock (Double, Bool) (Double, Bool) = Ok
+  type Link Lock (Double, Bool) Bool           = Ok
+
+
 -- TODO | - This class should be as flexible as possible
-class Chainable a b c | b -> a where
-  chainable :: (a -> a -> Bool) -> a -> b -> c
+class Link Lock p r ~ Ok => Chainable p r where
+  chainable :: (Double -> Double -> Bool) -> p -> Double -> r
 
 
-instance Chainable a a (a, Bool) where
-  chainable f a b = (a, f a b)
+instance Chainable Double (Double, Bool) where
+  chainable f a b = (b, f a b)
 
 
-instance Chainable a a Bool where
+instance Chainable Double Bool where
   chainable f a b = f a b
 
 
-instance Chainable a (a, Bool) (a, Bool) where
-  chainable f a (carried, previous) = (a, f a carried && previous)
+instance Chainable (Double, Bool) (Double, Bool) where
+  chainable f (carried, previous) b = (b, (f carried b) && previous)
 
 
-instance Chainable a (a, Bool) Bool where
-  chainable f a (carried, previous) = f a carried && previous
+instance Chainable (Double, Bool) Bool where
+  chainable f (carried, previous) b = (f carried b) && previous
+
+-- (a -> a -> Bool) -> a         -> a -> Bool      --
+-- (a -> a -> Bool) -> a         -> a -> (a, Bool) --
+-- (a -> a -> Bool) -> (a, Bool) -> a -> (a, Bool) --
+-- (a -> a -> Bool) -> (a, Bool) -> a -> Bool      --
 
 -- Chainable operators ---------------------------------------------------------------------------------------------------------------------
 
 -- | Chainable equality
-(=.) :: (Chainable a b c, Eq a) => a -> b -> c
+(=.) :: (Chainable p r) => p -> Double -> r
 (=.) = chainable (==)
 
 
 -- | Chainable less-than
-(<.) :: (Chainable a b c, Ord a) => a -> b -> c
-(<.) = chainable (<)
+-- (<.) :: (Chainable p r) => p -> Double -> r
+-- (<.) = chainable (<)
+(<.) :: Ord a => a -> a -> (a, Bool)
+(<.) = chainBegin (<)
+
+(<:) :: Ord a => (a, Bool) -> a -> Bool
+(<:) = chainEnd (<)
 
 
 -- | Chainable greater-than
-(>.) :: (Chainable a b c, Ord a) => a -> b -> c
+(>.) :: (Chainable p r) => p -> Double -> r
 (>.) = chainable (>)
 
 
 -- | Chainable less-or-equal
-(≤) :: (Chainable a b c, Ord a) => a -> b -> c
+(≤) :: (Chainable p r) => p -> Double -> r
 (≤) = chainable (<=)
 
 
 -- | Chainable greater-or-equal
-(≥) :: (Chainable a b c, Ord a) => a -> b -> c
+(≥) :: (Chainable p r) => p -> Double -> r
 (≥) = chainable (>=)
 
 
 -- |
 -- TODO | - Decide affinity
-infixr 4 =.
-infixr 4 <.
-infixr 4 >.
-infixr 4 ≤
-infixr 4 ≥
+infixl 4 =.
+infixl 4 <.
+infixl 4 <:
+infixl 4 >.
+infixl 4 ≤
+infixl 4 ≥
+
+
+-------
+
+chainBegin :: (a -> a -> Bool) -> a -> a -> (a, Bool)
+chainBegin f a b = (b, f a b)
+
+chainEnd :: (a -> a -> Bool) -> (a, Bool) -> a -> Bool
+chainEnd f (a, p) b = f a b && p
 
 -- Testing ---------------------------------------------------------------------------------------------------------------------------------
 
 -- |
 main :: IO ()
 main = do
+  putStrLn "Let's see if it works"
+
+  putStrLn "A slightly less complicated solution, based on different operators."
+
+  putStrLn "A more complicated solution, based on overloading"
+  print $ 0 <. 1 <: 2
   -- x₀ = 2.6
   -- x₁ = n
-  putStrLn "Let's see if it works"
-  putStrLn $ fold (++) "Hello" " " "World"
-  print $ ((0 :: Int) <. ((5 :: Int) <. (10 :: Int) :: (Int, Bool)) :: Bool)
+  -- putStrLn $ fold (++) "Hello" " " "World"
+  -- print comparison --(((0.0 :: Double) <. (0.3 :: Double)) <. (1.0 :: Double) :: Bool)
+  -- where
+  --   comparison :: Bool
+  --   comparison = ((0.0 :: Double) <. 0.2 :: (Double, Bool)) <. 1.0
