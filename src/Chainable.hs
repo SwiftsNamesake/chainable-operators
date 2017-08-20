@@ -118,7 +118,6 @@ infixl 4 >.
 infixl 4 ≤
 infixl 4 ≥
 
-
 -------
 
 chainBegin :: (a -> a -> Bool) -> a -> a -> (a, Bool)
@@ -135,9 +134,9 @@ main = do
   putStrLn "Let's see if it works"
 
   putStrLn "A slightly less complicated solution, based on different operators."
+  print $ 0 <. 1 <: 2
 
   putStrLn "A more complicated solution, based on overloading"
-  print $ 0 <. 1 <: 2
   -- x₀ = 2.6
   -- x₁ = n
   -- putStrLn $ fold (++) "Hello" " " "World"
